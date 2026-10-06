@@ -1,0 +1,43 @@
+# Generated environments, packages, caches
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+build/
+dist/
+.DS_Store
+
+# Machine settings, credentials, output and evidence must stay outside the repo
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.log
+.vbridge/
+private-tests/
+backups/
+artifacts/
+settings.json
+config.json
+oauth.json
+passphrase
+internal-token
+urltoken
+DISABLED
+graphify-out/
+
+# Local execution and screen evidence
+jobs/
+queue/
+screenshots/
+recordings/
+*.sqlite
+*.sqlite3
+*.db
+*.db-wal
+*.db-shm

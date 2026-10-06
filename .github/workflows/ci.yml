@@ -1,0 +1,48 @@
+name: Cross-platform checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-checks:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+        python: ['3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.19'
+          enable-cache: true
+          python-version: ${{ matrix.python }}
+      - name: Install locked dependencies
+        run: uv sync --locked --python ${{ matrix.python }}
+      - name: Offline tests (no live Desktop, account, or screen access)
+        run: uv run --locked pytest -q
+      - name: Lint
+        run: uv run --locked ruff check src tests scripts
+      - name: Format
+        run: uv run --locked ruff format --check src tests scripts
+      - name: Privacy guard
+        run: uv run --locked python scripts/privacy_audit.py
+      - name: Build wheel and source distribution
+        run: uv build
+      - name: Validate package contents
+        run: uv run --locked python scripts/release_check.py
+      - name: Parse PowerShell launcher
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $Errors = $null
+          $Tokens = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'windows-bridge.ps1'), [ref]$Tokens, [ref]$Errors) | Out-Null
+          if ($Errors.Count -gt 0) { $Errors | Write-Error; exit 1 }
