@@ -10,7 +10,7 @@ remote commit, release upload, or live machine configuration change is implied.
 | macOS/Windows implementations | Source present; implementation is not runtime verification |
 | macOS mocked/admin offline checks | Run locally during preparation; exact final results must be recorded below |
 | Windows mocked tests on macOS | Contract checks only; do not prove Windows APIs work |
-| CI matrix macOS/Windows Python 3.12/3.13 | Workflow supplied; **not run yet** |
+| CI matrix macOS/Windows Python 3.12/3.13 | First candidate run completed: macOS jobs passed, Windows fixtures failed; correction runs pending |
 | Wheel and sdist/privacy gates | Commands supplied; record actual final local results below |
 | Windows normal-user Task Scheduler / logon | **Not verified on Windows** |
 | Windows filesystem DACL and process-tree lifecycle | **Not verified on Windows** |
@@ -53,3 +53,12 @@ Recorded during local preparation on macOS:
 These are local snapshots, not an assertion that later source changes are green.
 Windows runtime and GitHub CI remain unverified even when all tests pass on the
 development Mac.
+
+## Private candidate CI checkpoint
+
+The first real cross-platform matrix exposed Windows-only fixture failures.
+Both macOS/Python jobs passed. Windows created processes and ran many core tests,
+but the complete Windows suite did not pass. Corrections preserve strict
+foreign-owner rejection, stop reopening an exclusive lock, and allow for
+PowerShell startup in timeout tests. This is not yet a passing Windows release.
+Additional native Windows ACL/reparse/process-owner tests are being added.
