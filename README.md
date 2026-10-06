@@ -1,5 +1,8 @@
 # Claude Voice Bridge — macOS and Windows
 
+**0.2.0 preview · MIT licensed.** Core tests pass on real Mac and Windows runners.
+Windows interactive desktop actions and Claude Voice routing remain unverified.
+
 Use a remote MCP connector in Claude to reach tools on your own Mac or Windows PC.
 The bridge provides OAuth authorization and direct local execution. It does not
 run a second model for direct tools and needs no inference API key.

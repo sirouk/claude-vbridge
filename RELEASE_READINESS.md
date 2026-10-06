@@ -1,79 +1,69 @@
-# Release readiness ledger
+# Release readiness: 0.2.0 preview
 
-This ledger records evidence, not marketing claims. No repository publication,
-remote commit, release upload, or live machine configuration change is implied.
+This is an MIT-licensed cross-platform **preview**, not a claim that every desktop
+workflow or Claude Voice account has been validated.
 
-| Gate | Evidence / status |
-| --- | --- |
-| MIT license and generic 2026 contributors copyright | Included in checkout |
-| Third-party and external extension boundary | THIRD_PARTY.md; not a full legal audit |
-| macOS/Windows implementations | Source present; implementation is not runtime verification |
-| macOS mocked/admin offline checks | Run locally during preparation; exact final results must be recorded below |
-| Windows mocked tests on macOS | Contract checks only; do not prove Windows APIs work |
-| CI matrix macOS/Windows Python 3.12/3.13 | Passed all four real CI jobs at fixture-corrected commit; stronger security candidate pending |
-| Wheel and sdist/privacy gates | Commands supplied; record actual final local results below |
-| Windows normal-user Task Scheduler / logon | **Not verified on Windows** |
-| Windows filesystem DACL and process-tree lifecycle | **Not verified on Windows** |
-| Windows screenshot, focus, text/key/mouse, clipboard | **Not verified in an interactive Windows session** |
-| Windows live public OAuth / Funnel shared routes | **Not verified** |
-| Fresh macOS interactive/public regression | Requires explicit owner-approved run; prior checks do not prove this release |
-| Claude Voice connector routing | **User-side unverified**; text/OAuth success does not establish voice support |
-| Publication review | Pending owner approval of repository target and reviewed contents/history |
+## Real CI evidence
 
-## Required evidence before a cross-platform verified release
+Source candidate: `312b9d4d77b79261fafa0161827aaf86ccbb2e2b`.
+Run: https://github.com/sirouk/claude-vbridge/actions/runs/37537563760
 
-1. Run all four real CI matrix jobs successfully. Record workflow/run links and
-   commit identifier here. Never call a workflow definition a passing result.
-2. On a normal-user Windows desktop, test launcher install/start/status/restart,
-   logon trigger, explicit replacement/backup, stop/kill switch, ACL fail-closed
-   behavior, and jobs with a synthetic child process. Confirm no admin/service is
-   required. Keep real usernames/SIDs and private paths outside this document.
-3. On each OS, test UI with an empty synthetic app and reviewed blank screen.
-   Confirm coordinate mapping and visible result. Do not capture personal data.
-4. Run owner-approved public OAuth/direct checks and verify a shared unrelated
-   Tailscale route survives. Do not publish real hostnames, tokens or passphrases.
-5. Test Claude text connector then Voice from the intended client/account.
-   Record limitations without asserting unsupported client features.
-6. Build wheel/sdist, run privacy checks and manually review candidate files and
-   history. Approve the public repo name/license before any publication.
+| Runner | Python | Offline tests | Full job |
+| --- | --- | --- | --- |
+| macOS | 3.12 | 107 passed, 12 skipped | Passed |
+| macOS | 3.13 | 107 passed, 12 skipped | Passed |
+| Windows | 3.12 | 115 passed, 4 skipped | Passed |
+| Windows | 3.13 | 115 passed, 4 skipped | Passed |
 
-## Local preparation results
+All four jobs passed locked dependency installation, lint, formatting, privacy
+checks, wheel/source builds and package-content checks. Windows jobs also parsed
+the PowerShell launcher. Privacy guard: 44 candidate files, zero findings.
+Platform-specific skips are intentional; they are not passes. The tests include
+actual Windows process creation, jobs, private storage and native failure paths.
+GUI tests mock actions and never capture a runner's screen or type into an app.
 
-Recorded during local preparation on macOS:
+### Native Windows security/process coverage
 
-- Admin and release tests: **19 passed** (`uv run --locked pytest -q
-  tests/test_admin.py tests/test_release.py`). Windows task behavior is mocked.
-- Scoped Ruff lint/format: passed for the operator and release Python files.
-- macOS launcher syntax: `bash -n mac-bridge.sh` passed.
-- Privacy guard: **43 candidate files, 0 findings** at this checkpoint. Candidate
-  count can grow as parallel implementation completes; rerun before publication.
-- `uv build`: built the 0.2.0 wheel and source distribution successfully.
-- `scripts/release_check.py`: 1 wheel and 1 sdist passed content checks.
+The passing candidate includes owner-only storage checks, rejected extra-ACE and
+unprotected ACLs, foreign-owner rejection (subject to test-token privilege),
+junction/reparse rejection, hardlink rejection without external target mutation,
+exclusive lock recovery after owner death, Job Object child cleanup after owner
+death, exit-code259 handling and suspended-process assignment failure cleanup.
+This is targeted regression evidence, not a comprehensive security certification.
 
-These are local snapshots, not an assertion that later source changes are green.
-Windows runtime and GitHub CI remain unverified even when all tests pass on the
-development Mac.
+Early CI correctly exposed fixture mistakes: administrator-owned temporary
+folders, reopening an exclusively held lock, and insufficient PowerShell startup
+budget. Fixes create private test directories and preserve strict ownership
+checks. The storage boundary no longer resolves away symlinks/junctions upstream.
 
-## Private candidate CI checkpoint
+## Live macOS baseline
 
-The first real cross-platform matrix exposed Windows-only fixture failures.
-Both macOS/Python jobs passed. Windows created processes and ran many core tests,
-but the complete Windows suite did not pass. Corrections preserve strict
-foreign-owner rejection, stop reopening an exclusive lock, and allow for
-PowerShell startup in timeout tests. This is not yet a passing Windows release.
-Additional native Windows ACL/reparse/process-owner tests are being added.
+On the existing operator installation, authenticated public OAuth/direct-shell
+checks, Desktop MCP backend connectivity and privacy preflights passed after
+cross-platform integration. No personal screen/clipboard capture, clicks, typing,
+or outgoing messages were used in that regression. Real machine details and
+credentials are kept outside the repo.
 
-## Real cross-platform CI evidence
+## Still unverified manually
 
-The fixture-corrected candidate passed every matrix job:
+- Windows installation/logon task as a normal non-admin user, restart and stop.
+  The installer/task contract is unit-tested, not end-to-end desktop-tested.
+- Windows screenshot, focus, typing, keys, mouse, clipboard and coordinate mapping
+  in a connected, unlocked interactive desktop.
+- Windows live public Funnel/OAuth with an unrelated shared route preserved.
+- Controlled visual interaction on each OS. Permission preflight is not action
+  delivery proof.
+- Claude Voice custom-connector routing. Text connector discovery and OAuth
+  success do not prove Voice support.
 
-- macOS: Python 3.12 and 3.13 — passed.
-- Windows: Python 3.12 and 3.13 — passed.
-- Includes actual local process/job execution, OAuth/state and package checks on
-  those runners; mocked UI checks are not real desktop action validation.
-- Commit: `4fdd5e7971cab152cd48351a335e272a828ffffa`.
-- Run: https://github.com/sirouk/claude-vbridge/actions/runs/37537301543
+For these tests, use a blank/synthetic desktop and disposable files; do not return
+personal screen contents or credentials to a test transcript. Record results
+without usernames, SIDs, real hostnames, tokens or private paths.
 
-Additional native Windows ACL/reparse/hardlink and owner-death tests have been
-added for a stronger candidate. Their matrix result must be inspected separately.
-Interactive desktop/UI and Voice routing remain unverified.
+## Publication boundary
+
+License and third-party notices are included; no installed third-party Desktop
+extension code is bundled. Candidate source and full Git history were checked for
+known private values before publication. Private settings, logs, screenshots,
+OAuth state and machine-specific test evidence are excluded. Repository publication
+must not be described as proof of full Windows GUI or Claude Voice support.
