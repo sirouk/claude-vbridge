@@ -84,6 +84,107 @@ class ProcessTests(unittest.IsolatedAsyncioTestCase):
                 await proc.wait()
                 processes.close_process(proc)
 
+    @unittest.skipUnless(os.name == "nt", "requires real Windows Job Objects")
+    async def test_windows_exit_code_259_is_terminal(self):
+        proc = processes._spawn_windows([sys.executable, "-c", "import sys; sys.exit(259)"], str(Path.cwd()))
+        try:
+            await asyncio.wait_for(proc.wait(), 5)
+            self.assertEqual(proc.returncode, 259)
+        finally:
+            processes.terminate_tree(proc)
+            processes.close_process(proc)
+
+    @unittest.skipUnless(os.name == "nt", "requires real Windows Job Objects")
+    async def test_windows_owner_death_kills_job_descendants(self):
+        import _winapi
+        import subprocess
+        from ctypes import wintypes
+
+        with tempfile.TemporaryDirectory() as directory:
+            marker = Path(directory) / "pids"
+            child_code = (
+                "import os,subprocess,sys,time; "
+                "child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)']); "
+                f"open({str(marker)!r},'w').write(str(os.getpid())+' '+str(child.pid)); "
+                "time.sleep(60)"
+            )
+            owner_code = (
+                "import sys,time; from vbridge.processes import _spawn_windows; "
+                f"proc=_spawn_windows([sys.executable,'-c',{child_code!r}],{directory!r}); "
+                "time.sleep(60)"
+            )
+            owner = subprocess.Popen(
+                [sys.executable, "-c", owner_code], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
+            )
+            try:
+                async with asyncio.timeout(10):
+                    while not marker.exists() or not marker.stat().st_size:
+                        if owner.poll() is not None:
+                            self.fail(owner.stderr.read().decode(errors="replace"))
+                        await asyncio.sleep(0.02)
+                pids = [int(pid) for pid in marker.read_text().split()]
+                _, kernel, _ = processes._windows_api()
+                kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+                kernel.OpenProcess.restype = wintypes.HANDLE
+                handles = [kernel.OpenProcess(0x100000, False, pid) for pid in pids]
+                self.assertTrue(all(handles))
+                try:
+                    owner.kill()  # abrupt death closes the sole Job handle
+                    await asyncio.to_thread(owner.wait, 5)
+                    for handle in handles:
+                        self.assertEqual(
+                            await asyncio.to_thread(_winapi.WaitForSingleObject, int(handle), 5000), 0
+                        )
+                finally:
+                    for handle in handles:
+                        if handle:
+                            kernel.CloseHandle(handle)
+            finally:
+                if owner.poll() is None:
+                    owner.kill()
+                await asyncio.to_thread(owner.wait, 5)
+                owner.stderr.close()
+
+    @unittest.skipUnless(os.name == "nt", "requires real Windows suspended processes")
+    async def test_windows_assignment_rejection_cleans_real_suspended_process(self):
+        import _winapi
+        from ctypes import wintypes
+
+        ctypes_api, kernel, limit_type = processes._windows_api()
+        kernel.GetProcessHandleCount.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+        kernel.GetProcessHandleCount.restype = wintypes.BOOL
+        count = wintypes.DWORD()
+        self.assertTrue(kernel.GetProcessHandleCount(_winapi.GetCurrentProcess(), ctypes.byref(count)))
+        baseline = count.value
+        captured = []
+
+        class RejectAssignment:
+            def __getattr__(self, name):
+                return getattr(kernel, name)
+
+            def AssignProcessToJobObject(self, job, process):
+                captured.append(process)
+                ctypes.set_last_error(5)
+                return False
+
+        with tempfile.TemporaryDirectory() as directory:
+            marker = Path(directory) / "must_not_execute"
+            with patch.object(
+                processes, "_windows_api", return_value=(ctypes_api, RejectAssignment(), limit_type)
+            ):
+                with self.assertRaises(OSError):
+                    processes._spawn_windows(
+                        [sys.executable, "-c", f"open({str(marker)!r},'w').write('executed')"], directory
+                    )
+            self.assertFalse(marker.exists())
+            self.assertEqual(len(captured), 1)
+            # The owned process HANDLE was closed after terminated suspended
+            # process cleanup. It cannot be waited on or signal user code.
+            with self.assertRaises(OSError):
+                _winapi.WaitForSingleObject(captured[0], 0)
+        self.assertTrue(kernel.GetProcessHandleCount(_winapi.GetCurrentProcess(), ctypes.byref(count)))
+        self.assertLessEqual(count.value, baseline + 1)
+
 
 class WindowsLaunchContractTests(unittest.TestCase):
     """Contract tests on any OS; real Windows integration is still required."""

@@ -40,9 +40,9 @@ risks before exposing it publicly, and stop the service when it is not needed.
 
 ## Install and connect
 
-Choose the instructions for your OS. **Windows implementation and mocked tests
-are present; real Windows CI and interactive desktop validation have not run
-yet.** See [RELEASE_READINESS.md](RELEASE_READINESS.md).
+Choose the instructions for your OS. **The core passes real macOS and Windows CI
+on Python 3.12 and 3.13. Interactive Windows desktop actions and Claude Voice
+routing remain unverified.** See [RELEASE_READINESS.md](RELEASE_READINESS.md).
 
 Python 3.12+, [uv](https://docs.astral.sh/uv/), and Tailscale with Funnel
 permission are required on either OS. Start from your checkout:

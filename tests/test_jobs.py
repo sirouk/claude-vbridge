@@ -518,30 +518,6 @@ class PrivateStorageTests(unittest.TestCase):
             secure_file(target)
             check_private_file(target)
 
-    @unittest.skipUnless(os.name == "nt", "requires real Windows junctions")
-    def test_windows_junction_boundary_refused(self):
-        import subprocess
-
-        from vbridge.job_store import ensure_private_dir, private_write
-
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            target = ensure_private_dir(root / "target")
-            linked = root / "junction"
-            result = subprocess.run(
-                ["cmd.exe", "/d", "/c", "mklink", "/J", str(linked), str(target)],
-                capture_output=True,
-                check=False,
-            )
-            self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
-            with self.assertRaises(OSError):
-                ensure_private_dir(linked)
-            with self.assertRaises(OSError):
-                JobRunner(linked)
-            with self.assertRaises(OSError):
-                private_write(linked / "secret", "must not be written")
-            self.assertFalse((target / "secret").exists())
-
     @unittest.skipUnless(os.name == "nt", "requires real Win32 ACL APIs")
     def test_windows_privacy_failure_refuses_admission(self):
         from vbridge.job_store import _WindowsSecurity

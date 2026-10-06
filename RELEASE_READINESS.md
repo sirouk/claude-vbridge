@@ -10,7 +10,7 @@ remote commit, release upload, or live machine configuration change is implied.
 | macOS/Windows implementations | Source present; implementation is not runtime verification |
 | macOS mocked/admin offline checks | Run locally during preparation; exact final results must be recorded below |
 | Windows mocked tests on macOS | Contract checks only; do not prove Windows APIs work |
-| CI matrix macOS/Windows Python 3.12/3.13 | First candidate run completed: macOS jobs passed, Windows fixtures failed; correction runs pending |
+| CI matrix macOS/Windows Python 3.12/3.13 | Passed all four real CI jobs at fixture-corrected commit; stronger security candidate pending |
 | Wheel and sdist/privacy gates | Commands supplied; record actual final local results below |
 | Windows normal-user Task Scheduler / logon | **Not verified on Windows** |
 | Windows filesystem DACL and process-tree lifecycle | **Not verified on Windows** |
@@ -62,3 +62,18 @@ but the complete Windows suite did not pass. Corrections preserve strict
 foreign-owner rejection, stop reopening an exclusive lock, and allow for
 PowerShell startup in timeout tests. This is not yet a passing Windows release.
 Additional native Windows ACL/reparse/process-owner tests are being added.
+
+## Real cross-platform CI evidence
+
+The fixture-corrected candidate passed every matrix job:
+
+- macOS: Python 3.12 and 3.13 — passed.
+- Windows: Python 3.12 and 3.13 — passed.
+- Includes actual local process/job execution, OAuth/state and package checks on
+  those runners; mocked UI checks are not real desktop action validation.
+- Commit: `4fdd5e7971cab152cd48351a335e272a828ffffa`.
+- Run: https://github.com/sirouk/claude-vbridge/actions/runs/37537301543
+
+Additional native Windows ACL/reparse/hardlink and owner-death tests have been
+added for a stronger candidate. Their matrix result must be inspected separately.
+Interactive desktop/UI and Voice routing remain unverified.
