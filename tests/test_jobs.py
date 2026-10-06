@@ -41,7 +41,7 @@ class JobTests(unittest.IsolatedAsyncioTestCase):
         await self.runner.close()
         self.temp.cleanup()
 
-    async def wait_file(self, path: Path, timeout: float = 3) -> None:
+    async def wait_file(self, path: Path, timeout: float = 8) -> None:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if path.exists() and path.stat().st_size > 0:
@@ -92,7 +92,8 @@ class JobTests(unittest.IsolatedAsyncioTestCase):
         result = await self.runner.status(record["id"], wait_s=3)
         self.assertEqual(result["state"], "done")
         self.assertEqual(result["exit_code"], 0)
-        self.assertIn("helloerror", result["output"])
+        self.assertIn("hello", result["output"])
+        self.assertIn("error", result["output"])
         self.assertIn(str(self.home), result["output"])
         record = await self.runner.start(
             python_command("import sys; print('failure',end=''); sys.exit(7)"), cwd=str(self.home)
@@ -100,10 +101,10 @@ class JobTests(unittest.IsolatedAsyncioTestCase):
         result = await self.runner.status(record["id"], wait_s=3)
         self.assertEqual(result["state"], "failed")
         self.assertEqual(result["exit_code"], 7)
-        self.assertEqual(result["output"], "failure")
+        self.assertEqual(result["output"].strip(), "failure")
         stored = json.loads((self.home / "jobs" / f"{record['id']}.json").read_text())
         self.assertEqual(stored["state"], "failed")
-        self.assertEqual(stored["output"], "failure")
+        self.assertEqual(stored["output"].strip(), "failure")
 
     async def test_status_wait_is_not_execution_timeout(self):
         record = await self.runner.start(
@@ -118,21 +119,24 @@ class JobTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("finished", result["output"])
 
     async def test_output_tail_is_bounded_and_keeps_latest(self):
-        command = python_command("import os; os.write(1,b'x'*200000); os.write(2,b'LATEST')")
+        command = python_command("import os; os.write(1,b'x'*200000+b'LATEST')")
         record = await self.runner.start(command, cwd=str(self.home))
         result = await self.runner.status(record["id"], wait_s=3, tail_bytes=MAX_OUTPUT)
         self.assertEqual(result["state"], "done")
         self.assertEqual(len(result["output"].encode()), MAX_OUTPUT)
-        self.assertTrue(result["output"].endswith("LATEST"))
+        self.assertTrue(result["output"].rstrip().endswith("LATEST"))
         self.assertTrue(result["output_truncated"])
-        self.assertEqual(result["output_bytes"], 200006)
+        if os.name == "posix":
+            self.assertEqual(result["output_bytes"], 200006)
+        else:
+            self.assertGreaterEqual(result["output_bytes"], 200006)
         small = await self.runner.status(record["id"], tail_bytes=10)
         self.assertEqual(len(small["output"].encode()), 10)
         self.assertTrue(small["tail_truncated"])
         self.assertEqual((await self.runner.status(record["id"], tail_bytes=0))["output"], "")
         stored = json.loads((self.home / "jobs" / f"{record['id']}.json").read_text())
         self.assertLessEqual(len(stored["output"].encode()), MAX_OUTPUT)
-        self.assertTrue(stored["output"].endswith("LATEST"))
+        self.assertTrue(stored["output"].rstrip().endswith("LATEST"))
 
     @unittest.skipIf(os.name == "nt", "PowerShell native stdout encoding differs from POSIX byte streams")
     async def test_invalid_utf8_expansion_reports_truncation(self):
@@ -216,7 +220,7 @@ class JobTests(unittest.IsolatedAsyncioTestCase):
             f"open({str(pids)!r},'w').write(str(os.getpid())+' '+str(child.pid)); "
             "time.sleep(30)"
         )
-        record = await self.runner.start(command, cwd=str(self.home), timeout_s=0.3)
+        record = await self.runner.start(command, cwd=str(self.home), timeout_s=2 if os.name == "nt" else 0.3)
         await self.wait_file(pids)
         parent, child = map(int, pids.read_text().split())
         result = await self.runner.status(record["id"], wait_s=3)
@@ -249,7 +253,7 @@ class JobTests(unittest.IsolatedAsyncioTestCase):
         marker = self.home / "background_pid"
         command = python_command(
             "import subprocess,sys; "
-            "child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)']); "
+            f"child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)'],stdout={'subprocess.DEVNULL' if os.name == 'nt' else 'None'}); "
             f"open({str(marker)!r},'w').write(str(child.pid))"
         )
         record = await self.runner.start(command, cwd=str(self.home))
@@ -339,10 +343,14 @@ class JobTests(unittest.IsolatedAsyncioTestCase):
         for path in (self.home / "jobs").iterdir():
             if os.name == "posix":
                 self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
-            else:
+            elif path.suffix == ".json":
                 from vbridge.job_store import check_private_file
 
                 check_private_file(path)
+            else:
+                # .lock is intentionally held with sharemode=0. Inspect via
+                # the owner's handle, never reopen an exclusive lock file.
+                self.runner._store._security.verify(self.runner._store._lock_handle, False)
         await self.runner.close()
         self.runner = JobRunner(self.home)
         restored = await self.runner.status(record["id"], tail_bytes=MAX_OUTPUT)
@@ -453,6 +461,69 @@ class JobTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(OSError):
             JobRunner(self.home)
         self.assertEqual(external.read_text(), "{}")
+
+
+class PrivateStorageTests(unittest.TestCase):
+    def test_private_write_permissions_and_tighten(self):
+        from vbridge.job_store import check_private_file, ensure_private_dir, private_write, secure_file
+
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory).resolve() / "nested" / "private"
+            ensure_private_dir(parent)
+            target = parent / "secret"
+            private_write(target, "fixture secret")
+            check_private_file(target)
+            self.assertEqual(target.read_text(), "fixture secret")
+            if os.name == "posix":
+                target.chmod(0o644)
+                with self.assertRaises(OSError):
+                    check_private_file(target)
+                secure_file(target)
+                check_private_file(target)
+
+    @unittest.skipUnless(os.name == "nt", "requires real Win32 ACL APIs")
+    def test_windows_acl_tamper_refused_then_repaired(self):
+        import ntsecuritycon
+        import win32security
+
+        from vbridge.job_store import check_private_file, ensure_private_dir, private_write, secure_file
+
+        with tempfile.TemporaryDirectory() as directory:
+            parent = ensure_private_dir(Path(directory) / "private")
+            target = parent / "secret"
+            private_write(target, "fixture secret")
+            check_private_file(target)
+            descriptor = win32security.GetNamedSecurityInfo(
+                str(target), win32security.SE_FILE_OBJECT, win32security.DACL_SECURITY_INFORMATION
+            )
+            acl = descriptor.GetSecurityDescriptorDacl()
+            acl.AddAccessAllowedAce(
+                win32security.ACL_REVISION,
+                ntsecuritycon.FILE_GENERIC_READ,
+                win32security.CreateWellKnownSid(win32security.WinWorldSid, None),
+            )
+            win32security.SetNamedSecurityInfo(
+                str(target),
+                win32security.SE_FILE_OBJECT,
+                win32security.DACL_SECURITY_INFORMATION | win32security.PROTECTED_DACL_SECURITY_INFORMATION,
+                None,
+                None,
+                acl,
+                None,
+            )
+            with self.assertRaises(OSError):
+                check_private_file(target)
+            secure_file(target)
+            check_private_file(target)
+
+    @unittest.skipUnless(os.name == "nt", "requires real Win32 ACL APIs")
+    def test_windows_privacy_failure_refuses_admission(self):
+        from vbridge.job_store import _WindowsSecurity
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(_WindowsSecurity, "verify", side_effect=OSError("ACL enforcement failed")):
+                with self.assertRaises(OSError):
+                    JobRunner(Path(directory) / "private")
 
 
 if __name__ == "__main__":

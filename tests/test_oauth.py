@@ -17,7 +17,7 @@ def client():
 
 @pytest.mark.asyncio
 async def test_pkce_issue_refresh_revoke(tmp_path):
-    provider = OwnerOAuthProvider(tmp_path / "oauth.json", "https://bridge.example.com")
+    provider = OwnerOAuthProvider(tmp_path / "state" / "oauth.json", "https://bridge.example.com")
     c = client()
     await provider.register_client(c)
     params = AuthorizationParams(
@@ -50,7 +50,7 @@ async def test_pkce_issue_refresh_revoke(tmp_path):
 
 @pytest.mark.asyncio
 async def test_audience_rejected(tmp_path):
-    provider = OwnerOAuthProvider(tmp_path / "oauth.json", "https://bridge.example.com")
+    provider = OwnerOAuthProvider(tmp_path / "state" / "oauth.json", "https://bridge.example.com")
     params = AuthorizationParams(
         state=None,
         scopes=["bridge"],

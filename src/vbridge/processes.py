@@ -10,6 +10,7 @@ the original shell exits. Windows requires the standard CPython Win32 APIs.
 from __future__ import annotations
 
 import asyncio
+import base64
 import os
 import shutil
 import signal
@@ -24,7 +25,10 @@ def shell_argv(command: str) -> list[str]:
         if not shell:
             raise RuntimeError("PowerShell (pwsh or powershell.exe) is required")
         # -Command strings are PowerShell programs, not cmd.exe programs.
-        return [shell, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command]
+        # Encoding avoids the different command-line quote parsers in
+        # Windows PowerShell 5.1, PowerShell 7 and CreateProcess argv.
+        encoded = base64.b64encode(command.encode("utf-16-le")).decode("ascii")
+        return [shell, "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded]
     return ["/bin/zsh" if sys.platform == "darwin" else "/bin/sh", "-c", command]
 
 

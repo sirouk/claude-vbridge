@@ -36,8 +36,9 @@ class AdminTests(unittest.TestCase):
 
     def test_install_writes_private_portable_agent(self):
         with tempfile.TemporaryDirectory() as directory:
-            home = Path(directory) / "state"
-            plist = Path(directory) / "agents/bridge.plist"
+            home = admin.ensure_private_dir(Path(directory) / "state")
+            agents = admin.ensure_private_dir(Path(directory) / "agents")
+            plist = agents / "bridge.plist"
             with (
                 patch.object(admin, "HOME", home),
                 patch.object(admin, "PLIST", plist),
@@ -89,7 +90,7 @@ class AdminTests(unittest.TestCase):
 
     def test_windows_install_refuses_existing_task_without_writes(self):
         with tempfile.TemporaryDirectory() as directory:
-            home = Path(directory)
+            home = admin.ensure_private_dir(Path(directory) / "state")
             with (
                 patch.object(admin, "HOME", home),
                 patch.object(admin.sys, "platform", "win32"),
@@ -104,7 +105,7 @@ class AdminTests(unittest.TestCase):
 
     def test_windows_install_registers_only_current_sid(self):
         with tempfile.TemporaryDirectory() as directory:
-            home = Path(directory)
+            home = admin.ensure_private_dir(Path(directory) / "state")
             with (
                 patch.object(admin, "HOME", home),
                 patch.object(admin.sys, "platform", "win32"),
@@ -124,7 +125,7 @@ class AdminTests(unittest.TestCase):
         from subprocess import CompletedProcess
 
         with tempfile.TemporaryDirectory() as directory:
-            home = Path(directory)
+            home = admin.ensure_private_dir(Path(directory) / "state")
             admin.private_write(home / "settings.json", '{"public_url": "https://bridge.example"}')
             before = (home / "settings.json").read_bytes()
             with (
@@ -139,7 +140,7 @@ class AdminTests(unittest.TestCase):
 
     def test_windows_stop_sets_persistent_switch_and_preserves_routes(self):
         with tempfile.TemporaryDirectory() as directory:
-            home = Path(directory)
+            home = admin.ensure_private_dir(Path(directory) / "state")
             with (
                 patch.object(admin, "HOME", home),
                 patch.object(admin.sys, "platform", "win32"),
@@ -166,8 +167,9 @@ class AdminTests(unittest.TestCase):
             current["AllowFunnel"] = {"bridge.example:443": True}
 
         with tempfile.TemporaryDirectory() as directory:
+            home = admin.ensure_private_dir(Path(directory) / "state")
             with (
-                patch.object(admin, "HOME", Path(directory)),
+                patch.object(admin, "HOME", home),
                 patch.object(admin, "settings", return_value=("https://bridge.example", 8799)),
                 patch.object(admin.subprocess, "check_output", side_effect=read),
                 patch.object(admin.subprocess, "run", side_effect=run),
@@ -180,14 +182,15 @@ class AdminTests(unittest.TestCase):
                     current["Web"]["bridge.example:443"]["Handlers"]["/"],
                     initial["Web"]["bridge.example:443"]["Handlers"]["/"],
                 )
-                self.assertEqual(len(list((Path(directory) / "backups").glob("routing-*.json"))), 1)
+                self.assertEqual(len(list((home / "backups").glob("routing-*.json"))), 1)
 
     def test_concurrent_route_conflict_stops_before_write(self):
         before = {"Web": {"bridge.example:443": {"Handlers": {}}}}
         changed = {"Web": {"bridge.example:443": {"Handlers": {"/mcp": {"Proxy": "http://127.0.0.1:9998"}}}}}
         with tempfile.TemporaryDirectory() as directory:
+            home = admin.ensure_private_dir(Path(directory) / "state")
             with (
-                patch.object(admin, "HOME", Path(directory)),
+                patch.object(admin, "HOME", home),
                 patch.object(admin, "settings", return_value=("https://bridge.example", 8799)),
                 patch.object(
                     admin.subprocess, "check_output", side_effect=[json.dumps(before), json.dumps(changed)]
@@ -234,7 +237,7 @@ class AdminTests(unittest.TestCase):
                 raise AssertionError("Unexpected request")
 
         with tempfile.TemporaryDirectory() as directory:
-            home = Path(directory)
+            home = admin.ensure_private_dir(Path(directory) / "state")
             admin.private_write(home / "passphrase", "local-test-passphrase")
             client = Client()
             with (

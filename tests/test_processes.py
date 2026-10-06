@@ -1,6 +1,7 @@
 """Local process tests. Real portable commands; no inference or GUI access."""
 
 import asyncio
+import base64
 import ctypes
 import os
 import shlex
@@ -44,7 +45,14 @@ class ProcessTests(unittest.IsolatedAsyncioTestCase):
         ):
             self.assertEqual(
                 processes.shell_argv("hello"),
-                ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "hello"],
+                [
+                    "powershell.exe",
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-EncodedCommand",
+                    base64.b64encode("hello".encode("utf-16-le")).decode("ascii"),
+                ],
             )
         with (
             patch.object(processes.os, "name", "nt"),

@@ -11,7 +11,9 @@ from .job_store import check_private_file
 
 
 def settings() -> dict:
-    home = Path(os.environ.get("VBRIDGE_HOME", Path.home() / ".vbridge")).expanduser().resolve()
+    home = Path(os.environ.get("VBRIDGE_HOME", Path.home() / ".vbridge")).expanduser().absolute()
+    # Never resolve the HOME boundary: private storage must reject symlinks and
+    # Windows reparses, rather than silently switching to their targets.
     config_path = home / "settings.json"
     if config_path.exists():
         check_private_file(config_path)

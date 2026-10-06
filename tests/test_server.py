@@ -5,7 +5,7 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_ui_and_legacy_catalog_gates(tmp_path, monkeypatch):
-    monkeypatch.setenv("VBRIDGE_HOME", str(tmp_path))
+    monkeypatch.setenv("VBRIDGE_HOME", str(tmp_path / "state"))
     monkeypatch.setenv("VBRIDGE_DESKTOP_ENABLED", "0")
     monkeypatch.setenv("VBRIDGE_UI_ENABLED", "0")
     import sys
@@ -30,7 +30,7 @@ async def test_ui_and_legacy_catalog_gates(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_job_tool_roundtrip(tmp_path, monkeypatch):
-    monkeypatch.setenv("VBRIDGE_HOME", str(tmp_path))
+    monkeypatch.setenv("VBRIDGE_HOME", str(tmp_path / "state"))
     monkeypatch.setenv("VBRIDGE_DESKTOP_ENABLED", "0")
     import sys
 

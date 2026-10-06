@@ -7,11 +7,12 @@ from vbridge.job_store import private_write
 
 
 def test_private_settings_and_env_overrides(tmp_path, monkeypatch):
-    monkeypatch.setenv("VBRIDGE_HOME", str(tmp_path))
+    state = tmp_path / "state"
+    monkeypatch.setenv("VBRIDGE_HOME", str(state))
     monkeypatch.delenv("VBRIDGE_PUBLIC_URL", raising=False)
     monkeypatch.delenv("VBRIDGE_PORT", raising=False)
     private_write(
-        tmp_path / "settings.json",
+        state / "settings.json",
         json.dumps({"public_url": "https://bridge.example.com", "port": 8811, "ui_enabled": True}),
     )
     cfg = settings()
@@ -37,3 +38,21 @@ def test_invalid_origin(tmp_path, monkeypatch, url):
     monkeypatch.setenv("VBRIDGE_PUBLIC_URL", url)
     with pytest.raises(ValueError):
         settings()
+
+
+def test_home_symlink_not_silently_resolved(tmp_path, monkeypatch):
+    import os
+
+    if os.name == "nt":
+        pytest.skip("Native Windows junction behavior covered by storage tests")
+    target = tmp_path / "target"
+    target.mkdir()
+    link = tmp_path / "alias"
+    link.symlink_to(target, target_is_directory=True)
+    monkeypatch.setenv("VBRIDGE_HOME", str(link))
+    cfg = settings()
+    assert cfg["home"] == link
+    from vbridge.job_store import ensure_private_dir
+
+    with pytest.raises(ValueError):
+        ensure_private_dir(cfg["home"])
